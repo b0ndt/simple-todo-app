@@ -1,70 +1,54 @@
-import React, { useState, useEffect } from "react";
+import { useState, type KeyboardEvent } from "react";
+import { AlertTriangle, Check, LoaderCircle, Trash2 } from "lucide-react";
 import { Button, Card } from "../design-system/components/ui";
-
-interface Todo {
-  id: string;
-  text: string;
-  completed: boolean;
-}
-
-const STORAGE_KEY = "todos";
-
-function loadTodos(): Todo[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveTodos(todos: Todo[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(todos));
-}
+import { useTodos } from "../src/hooks/useTodos";
 
 export default function TodoScreen() {
-  const [todos, setTodos] = useState<Todo[]>(loadTodos);
   const [inputValue, setInputValue] = useState("");
+  const {
+    status,
+    todos,
+    loadError,
+    mutationError,
+    inputError,
+    isSaving,
+    summary,
+    loadTodos,
+    resetCorruptData,
+    addTodo,
+    toggleTodo,
+    deleteTodo,
+  } = useTodos();
 
-  useEffect(() => {
-    saveTodos(todos);
-  }, [todos]);
+  const isInputDisabled = status !== "ready" || isSaving;
+  const canSubmit = inputValue.trim().length > 0 && !isInputDisabled;
 
-  const handleAdd = () => {
-    const trimmed = inputValue.trim();
-    if (!trimmed) return;
-    const newTodo: Todo = {
-      id: crypto.randomUUID(),
-      text: trimmed,
-      completed: false,
-    };
-    setTodos((prev) => [newTodo, ...prev]);
-    setInputValue("");
+  const handleAdd = async () => {
+    const didAdd = await addTodo(inputValue);
+
+    if (didAdd) {
+      setInputValue("");
+    }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") handleAdd();
+  const handleKeyDown = async (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      await handleAdd();
+    }
   };
-
-  const toggleComplete = (id: string) => {
-    setTodos((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, completed: !t.completed } : t))
-    );
-  };
-
-  const deleteTodo = (id: string) => {
-    setTodos((prev) => prev.filter((t) => t.id !== id));
-  };
-
-  const remaining = todos.filter((t) => !t.completed).length;
-  const completed = todos.filter((t) => t.completed).length;
 
   return (
     <div className="min-h-screen bg-background font-sans">
       <div className="app-container">
-        {/* Header */}
         <header className="mb-8 text-center">
-          <h1 className="text-4xl font-extrabold text-text-primary tracking-tight">
+          <img
+            src="/assets/logo.png"
+            alt="Todo logo"
+            className="mx-auto mb-4 h-14 w-14"
+            loading="eager"
+          />
+          <h1 className="text-4xl font-extrabold tracking-tight text-text-primary">
             Todo
           </h1>
           <p className="mt-2 text-base text-text-muted">
@@ -72,128 +56,164 @@ export default function TodoScreen() {
           </p>
         </header>
 
-        {/* Add Todo Input Row */}
-        <div className="flex gap-3 mb-6">
+        <div className="mb-6">
+          <img
+            src="/assets/hero.png"
+            alt="Todo app hero illustration"
+            className="w-full rounded-lg border border-border shadow-sm"
+            loading="lazy"
+          />
+        </div>
+
+        <div className="mb-2 flex gap-3">
           <input
             type="text"
             value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            onKeyDown={handleKeyDown}
+            onChange={(event) => setInputValue(event.target.value)}
+            onKeyDown={(event) => void handleKeyDown(event)}
             placeholder="What needs to be done?"
-            className="flex-1 h-10 px-3 text-base bg-surface text-text-primary
-                       border border-border rounded-md
-                       placeholder:text-text-muted
-                       focus:outline-none focus:border-border-focus focus:ring-2 focus:ring-border-focus/30
-                       transition-all-fast"
+            disabled={isInputDisabled}
+            className="h-11 flex-1 rounded-md border border-border bg-surface px-3 text-base text-text-primary placeholder:text-text-muted focus:border-border-focus focus:outline-none focus:ring-2 focus:ring-border-focus/30 disabled:cursor-not-allowed disabled:bg-disabled-bg disabled:text-disabled-text"
           />
-          <Button variant="primary" size="md" onClick={handleAdd}>
-            Add
+          <Button
+            variant="primary"
+            size="md"
+            onClick={() => void handleAdd()}
+            disabled={!canSubmit}
+          >
+            {isSaving && <LoaderCircle className="h-4 w-4 animate-spin" />}
+            {isSaving ? "Saving..." : "Add"}
           </Button>
         </div>
 
-        {/* Todo List */}
-        <div className="flex flex-col gap-3">
-          {todos.length === 0 && (
-            <div className="py-16 text-center">
-              <p className="text-lg text-text-muted">No todos yet</p>
-              <p className="mt-1 text-sm text-text-muted">
-                Add one above to get started
-              </p>
-            </div>
-          )}
+        {inputError && <p className="mb-4 text-sm text-danger">{inputError}</p>}
 
-          {todos.map((todo) => (
-            <Card
-              key={todo.id}
-              variant={todo.completed ? "completed" : "default"}
-            >
-              <div className="flex items-center gap-3">
-                {/* Checkbox */}
-                <button
-                  onClick={() => toggleComplete(todo.id)}
-                  className={`flex-shrink-0 w-5 h-5 rounded-sm border-2 flex items-center justify-center
-                             transition-all-fast
-                             ${
-                               todo.completed
-                                 ? "bg-success border-success text-white"
-                                 : "border-border hover:border-primary bg-surface"
-                             }`}
-                  aria-label={
-                    todo.completed
-                      ? `Mark "${todo.text}" as incomplete`
-                      : `Mark "${todo.text}" as complete`
-                  }
-                >
-                  {todo.completed && (
-                    <svg
-                      width="12"
-                      height="12"
-                      viewBox="0 0 12 12"
-                      fill="none"
-                      xmlns="http://www.w3.org/2000/svg"
-                    >
-                      <path
-                        d="M2.5 6L5 8.5L9.5 3.5"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  )}
-                </button>
-
-                {/* Todo Text */}
-                <span
-                  className={`flex-1 text-base leading-relaxed ${
-                    todo.completed
-                      ? "text-strikethrough text-text-muted"
-                      : "text-text-primary"
-                  }`}
-                >
-                  {todo.text}
-                </span>
-
-                {/* Delete Button */}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => deleteTodo(todo.id)}
-                  aria-label={`Delete "${todo.text}"`}
-                  className="text-text-muted hover:text-danger hover:bg-danger-light"
-                >
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 16 16"
-                    fill="none"
-                    xmlns="http://www.w3.org/2000/svg"
-                  >
-                    <path
-                      d="M2 4H14M5.333 4V2.667C5.333 2.313 5.474 1.973 5.724 1.724C5.974 1.474 6.313 1.333 6.667 1.333H9.333C9.687 1.333 10.026 1.474 10.276 1.724C10.526 1.973 10.667 2.313 10.667 2.667V4M12.667 4V13.333C12.667 13.687 12.526 14.026 12.276 14.276C12.026 14.526 11.687 14.667 11.333 14.667H4.667C4.313 14.667 3.974 14.526 3.724 14.276C3.474 14.026 3.333 13.687 3.333 13.333V4H12.667Z"
-                      stroke="currentColor"
-                      strokeWidth="1.33"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                </Button>
+        {mutationError && (
+          <Card className="mb-4 border-danger/40 bg-danger-light">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="mt-0.5 h-4 w-4 text-danger" />
+              <div>
+                <p className="text-sm font-medium text-danger">
+                  Could not save your latest change.
+                </p>
+                <p className="text-sm text-text-secondary">{mutationError.message}</p>
               </div>
-            </Card>
-          ))}
-        </div>
+            </div>
+          </Card>
+        )}
 
-        {/* Footer Stats */}
-        {todos.length > 0 && (
-          <div className="mt-6 flex justify-center gap-4 text-sm text-text-secondary">
-            <span>
-              {remaining} item{remaining !== 1 ? "s" : ""} left
-            </span>
-            <span className="text-border">·</span>
-            <span>
-              {completed} done
-            </span>
+        {status === "loading" && (
+          <div className="flex flex-col gap-3">
+            {[0, 1, 2].map((placeholder) => (
+              <Card key={placeholder} className="animate-pulse">
+                <div className="h-6 w-2/3 rounded-md bg-disabled-bg" />
+              </Card>
+            ))}
           </div>
+        )}
+
+        {status === "error" && loadError && (
+          <Card className="border-danger/40 bg-danger-light">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="mt-0.5 h-5 w-5 text-danger" />
+              <div className="flex-1">
+                <h2 className="text-base font-semibold text-danger">
+                  Unable to load todos
+                </h2>
+                <p className="mt-1 text-sm text-text-secondary">{loadError.message}</p>
+                <div className="mt-4 flex flex-wrap gap-3">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => void loadTodos()}
+                    disabled={isSaving}
+                  >
+                    Retry
+                  </Button>
+                  {loadError.code === "CORRUPT" && (
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      onClick={() => void resetCorruptData()}
+                      disabled={isSaving}
+                    >
+                      Reset local data
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </Card>
+        )}
+
+        {status === "ready" && (
+          <>
+            <div className="flex flex-col gap-3">
+              {todos.length === 0 && (
+                <div className="py-16 text-center">
+                  <p className="text-lg text-text-muted">No todos yet</p>
+                  <p className="mt-1 text-sm text-text-muted">
+                    Add one above to get started
+                  </p>
+                </div>
+              )}
+
+              {todos.map((todo) => (
+                <Card key={todo.id} variant={todo.completed ? "completed" : "default"}>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => void toggleTodo(todo.id)}
+                      disabled={isInputDisabled}
+                      className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-sm border-2 transition-all-fast ${
+                        todo.completed
+                          ? "border-success bg-success text-surface"
+                          : "border-border bg-surface hover:border-primary"
+                      } disabled:cursor-not-allowed disabled:border-disabled-text`}
+                      aria-label={
+                        todo.completed
+                          ? `Mark "${todo.text}" as incomplete`
+                          : `Mark "${todo.text}" as complete`
+                      }
+                    >
+                      {todo.completed && <Check className="h-3 w-3" strokeWidth={3} />}
+                    </button>
+
+                    <span
+                      className={`flex-1 text-base leading-relaxed ${
+                        todo.completed
+                          ? "text-strikethrough text-text-muted"
+                          : "text-text-primary"
+                      }`}
+                    >
+                      {todo.text}
+                    </span>
+
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => void deleteTodo(todo.id)}
+                      aria-label={`Delete "${todo.text}"`}
+                      className="text-text-muted hover:bg-danger-light hover:text-danger"
+                      disabled={isInputDisabled}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </Card>
+              ))}
+            </div>
+
+            {todos.length > 0 && (
+              <div className="mt-6 flex justify-center gap-4 text-sm text-text-secondary">
+                <span>
+                  {summary.remaining} item{summary.remaining !== 1 ? "s" : ""} left
+                </span>
+                <span className="text-border">·</span>
+                <span>{summary.completed} done</span>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
